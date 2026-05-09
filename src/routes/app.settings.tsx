@@ -309,6 +309,8 @@ function PageComponent() {
         </div>
       </Section>
 
+      <ServerDiscoverySection />
+
       <p className="mt-8 text-center font-mono text-[10px] text-muted-foreground">{t("set.build")}</p>
 
       {langOpen && (
