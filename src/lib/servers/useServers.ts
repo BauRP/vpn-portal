@@ -34,29 +34,55 @@ export type ServerRow = {
   created_at: string;
 };
 
-async function fetchServers(): Promise<{ servers: ServerRow[]; source: "live" | "rescue" }> {
-  // Try live first
-  const { data: live, error: liveErr } = await supabase
-    .from("servers")
-    .select("*")
-    .eq("is_alive", true)
-    .order("latency_ms", { ascending: true, nullsFirst: false })
-    .limit(50);
+import { dedupe } from "./parsers";
 
-  if (liveErr) throw liveErr;
-  if (live && live.length > 0) {
-    return { servers: live as ServerRow[], source: "live" };
+async function fetchServers(): Promise<{
+  servers: ServerRow[];
+  source: "live" | "rescue" | "backup";
+}> {
+  // 1. Live rows
+  try {
+    const { data: live, error } = await supabase
+      .from("servers")
+      .select("*")
+      .eq("is_alive", true)
+      .order("latency_ms", { ascending: true, nullsFirst: false })
+      .limit(50);
+    if (!error && live && live.length > 0) {
+      return { servers: dedupe(live as ServerRow[]), source: "live" };
+    }
+  } catch {
+    /* fall through */
   }
 
-  // Fall back to rescue rows
-  const { data: rescue, error: rescueErr } = await supabase
+  // 2. Backup table (Supabase fallback — populated by the scraper)
+  try {
+    // `backup_servers` mirrors `servers`; cast to any since it may not be
+    // present in generated types until the migration is applied.
+    const { data: backup, error } = await (supabase as unknown as {
+      from: (t: string) => {
+        select: (s: string) => {
+          limit: (n: number) => Promise<{ data: ServerRow[] | null; error: unknown }>;
+        };
+      };
+    })
+      .from("backup_servers")
+      .select("*")
+      .limit(50);
+    if (!error && backup && backup.length > 0) {
+      return { servers: dedupe(backup), source: "backup" };
+    }
+  } catch {
+    /* fall through */
+  }
+
+  // 3. Rescue rows
+  const { data: rescue } = await supabase
     .from("servers")
     .select("*")
     .eq("source", "rescue")
     .limit(20);
-
-  if (rescueErr) throw rescueErr;
-  return { servers: (rescue ?? []) as ServerRow[], source: "rescue" };
+  return { servers: dedupe((rescue ?? []) as ServerRow[]), source: "rescue" };
 }
 
 export function useServers() {

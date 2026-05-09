@@ -19,6 +19,54 @@ import { vpnEngine } from "@/components/mastervpn/vpnEngine";
 import { CrownIcon } from "@/components/mastervpn/PaywallModal";
 import { SplitTunnelSection, PremiumLockedToggle } from "@/components/mastervpn/SplitTunnel";
 import type { LangCode } from "@/i18n/translations";
+import { useServerFn } from "@tanstack/react-start";
+import { scrapePublicSources } from "@/lib/servers/scrape.functions";
+import { useQueryClient } from "@tanstack/react-query";
+
+function ServerDiscoverySection() {
+  const invokeScrape = useServerFn(scrapePublicSources);
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ nodes: number; sources: number; raw: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await invokeScrape();
+      setResult({ nodes: r.nodes.length, sources: r.sources, raw: r.raw });
+      qc.invalidateQueries({ queryKey: ["servers"] });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section title="// SERVER DISCOVERY">
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        Aggregates public VLESS / VMess / Shadowsocks / Trojan subscription sources, parses with the strict sanitizer, and dedupes by host:port.
+      </p>
+      <button
+        onClick={run}
+        disabled={busy}
+        className="mt-3 w-full rounded-md border border-neon/40 bg-neon/10 px-3 py-2 font-mono text-[11px] tracking-widest text-neon hover:bg-neon/20 disabled:opacity-50"
+      >
+        {busy ? "SCANNING…" : "REFRESH SOURCES"}
+      </button>
+      {result && (
+        <div className="mt-3 space-y-1 font-mono text-[10px] text-muted-foreground">
+          <div className="flex justify-between"><span>SOURCES</span><span className="text-foreground">{result.sources}</span></div>
+          <div className="flex justify-between"><span>RAW PARSED</span><span className="text-foreground">{result.raw}</span></div>
+          <div className="flex justify-between"><span>UNIQUE NODES</span><span className="text-success">{result.nodes}</span></div>
+        </div>
+      )}
+      {error && <p className="mt-2 font-mono text-[10px] text-destructive">{error}</p>}
+    </Section>
+  );
+}
 
 function PageComponent() {
   const { t, lang, setLang } = useI18n();
@@ -308,6 +356,8 @@ function PageComponent() {
           ))}
         </div>
       </Section>
+
+      <ServerDiscoverySection />
 
       <p className="mt-8 text-center font-mono text-[10px] text-muted-foreground">{t("set.build")}</p>
 
