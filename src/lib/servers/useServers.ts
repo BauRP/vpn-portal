@@ -73,7 +73,7 @@ export function useServers() {
   // dashboard reflects the live cloud state without manual reload.
   useEffect(() => {
     const channel = supabase
-      .channel("servers-live")
+      .channel(`servers-live-${Math.random().toString(36).slice(2)}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "servers" },
