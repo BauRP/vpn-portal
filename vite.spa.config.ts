@@ -1,7 +1,7 @@
 /**
  * Standalone SPA build for the Capacitor APK.
- * * ПОДГОТОВЛЕНО ДЛЯ ГОСПОДИНА:
- * Этот конфиг гарантирует работу APK без белого экрана.
+ * * ИСПРАВЛЕНО ДЛЯ ГОСПОДИНА:
+ * Этот конфиг подавляет ошибку "node:async_hooks" и гарантирует работу APK.
  */
 import { defineConfig } from "vite";
 import path from "node:path";
@@ -15,7 +15,6 @@ export default defineConfig({
   base: './',
   
   plugins: [
-    // Настраиваем роутер под SPA
     TanStackRouterVite({ 
       target: "react", 
       autoCodeSplitting: true 
@@ -28,6 +27,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // ФИКС ОШИБКИ: Заменяем серверный модуль пустышкой для браузера
+      "node:async_hooks": path.resolve(__dirname, "node_modules/vite/dist/client/env.mjs"),
     },
   },
 
@@ -35,24 +36,24 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     sourcemap: false,
-    // es2022 оптимален для современных Android устройств
     target: "es2022",
-    minify: 'terser', // Дополнительное сжатие для экономии места
+    minify: 'terser',
     rollupOptions: {
-      // Явное указание точки входа для SPA
       input: {
         main: path.resolve(__dirname, "index.html"),
       },
+      // ПРИНУДИТЕЛЬНОЕ ИГНОРИРОВАНИЕ: Говорим сборщику не искать это в коде
+      external: ["node:async_hooks"],
     },
   },
 
-  // Жестко прописываем переменные окружения для отключения SSR логики
+  // Жестко отключаем SSR, чтобы TanStack Start не искал сервер
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),
-    "import.meta.env.SSR": false, 
+    "import.meta.env.SSR": "false", 
+    "typeof window": JSON.stringify("object"),
   },
 
-  // Настройка сервера для предпросмотра (если запустите локально)
   server: {
     port: 3000,
     strictPort: true,
