@@ -10,11 +10,12 @@ export const Route = createFileRoute("/app/profile")({
   component: PageComponent,
 });
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useSecurity } from "@/components/mastervpn/SecurityContext";
 import { usePremium } from "@/components/mastervpn/PremiumContext";
 import { CrownIcon } from "@/components/mastervpn/PaywallModal";
+import { DevPanelModal } from "@/components/mastervpn/DevPanelModal";
 
 function generateId() {
   const chars = "0123456789ABCDEF";
