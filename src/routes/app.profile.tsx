@@ -30,6 +30,8 @@ function PageComponent() {
   const { isPremium, openPaywall } = usePremium();
   const [id, setId] = useState<string>("---------------");
   const [wiped, setWiped] = useState(false);
+  const [devOpen, setDevOpen] = useState(false);
+  const tapTimes = useRef<number[]>([]);
 
   useEffect(() => {
     setId(generateId());
@@ -43,8 +45,25 @@ function PageComponent() {
     }, 1200);
   };
 
+  // Hidden top-right interaction: 3 taps within 1.2s opens the dev panel.
+  const handleHiddenTap = () => {
+    const now = Date.now();
+    tapTimes.current = [...tapTimes.current, now].filter((t) => now - t < 1200);
+    if (tapTimes.current.length >= 3) {
+      tapTimes.current = [];
+      setDevOpen(true);
+    }
+  };
+
   return (
-    <div className="px-5 py-6">
+    <div className="relative px-5 py-6">
+      {/* Invisible developer tap zone — top-right quadrant */}
+      <div
+        onClick={handleHiddenTap}
+        aria-hidden="true"
+        className="absolute right-0 top-0 z-30 h-24 w-24"
+      />
+      <DevPanelModal open={devOpen} onClose={() => setDevOpen(false)} />
       <div
         className={`rounded-2xl border bg-card p-6 text-center ${
           isPremium ? "border-neon/40 glow-neon" : "border-border"
