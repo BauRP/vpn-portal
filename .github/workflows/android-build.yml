@@ -16,8 +16,10 @@ jobs:
           node-version: '22'
       - name: Install Dependencies
         run: npm install
-      - name: Build Web Assets
-        run: npm run build
+      - name: Build SPA Web Assets (Capacitor target)
+        env:
+          CAPACITOR_BUILD: '1'
+        run: npm run build:spa
       - name: Add Android platform (if missing)
         run: |
           if [ ! -d "android" ]; then
