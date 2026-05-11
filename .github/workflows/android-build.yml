@@ -2,8 +2,8 @@ name: Build VPN Elite APK
 
 on: 
   push:
-    branches: [ main, master ] # Сборка сработает при пуше в эти ветки
-  workflow_dispatch: # Позволяет запустить сборку вручную кнопкой на GitHub
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -27,32 +27,36 @@ jobs:
         run: npm install
 
       - name: Build SPA Web Assets
-        # Господин, здесь мы принудительно используем наш новый конфиг
+        # Используем наш исправленный конфиг, который игнорирует серверные ошибки
         run: npx vite build --config vite.spa.config.ts
 
+      - name: Accept Android Licenses
+        # ЭТО ВАЖНО: Без этого сборка может зависнуть, запрашивая подтверждение вручную
+        run: yes | source /usr/local/lib/android/sdk/tools/bin/sdkmanager --licenses || true
+
       - name: Initialize Capacitor Android
-        # Если папки android нет, робот создаст её по стандарту
+        # Если папки android нет — создаем. Если есть — просто пропускаем шаг.
         run: |
           if [ ! -d "android" ]; then
             npx cap add android
+          else
+            echo "Папка android уже существует, пропускаем инициализацию."
           fi
 
       - name: Capacitor Sync
-        # Копируем наш "dist" (сайт) в папку мобильного приложения
+        # Синхронизируем наш сайт с мобильной оболочкой
         run: npx cap sync android
 
       - name: Build Debug APK
         run: |
           cd android
-          # Даем права на запуск сборщика
           chmod +x gradlew
-          # Собираем файл
+          # Собираем APK в режиме отладки
           ./gradlew assembleDebug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: VPN-Elite-Build
-          # Точный путь к готовому файлу
           path: android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 5 # Файл будет храниться 5 дней
+          retention-days: 5
