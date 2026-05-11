@@ -1,7 +1,7 @@
 /**
  * Standalone SPA build for the Capacitor APK.
  * * ИСПРАВЛЕНО ДЛЯ ГОСПОДИНА:
- * Этот конфиг подавляет ошибку "node:async_hooks" и гарантирует работу APK.
+ * Убраны конфликты синтаксиса, мешавшие сборке APK.
  */
 import { defineConfig } from "vite";
 import path from "node:path";
@@ -27,7 +27,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      // ФИКС ОШИБКИ: Заменяем серверный модуль пустышкой для браузера
+      // Заглушка для серверных модулей Node.js
       "node:async_hooks": path.resolve(__dirname, "node_modules/vite/dist/client/env.mjs"),
     },
   },
@@ -42,16 +42,16 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, "index.html"),
       },
-      // ПРИНУДИТЕЛЬНОЕ ИГНОРИРОВАНИЕ: Говорим сборщику не искать это в коде
+      // Игнорируем серверные зависимости при сборке
       external: ["node:async_hooks"],
     },
   },
 
-  // Жестко отключаем SSR, чтобы TanStack Start не искал сервер
+  // ИСПРАВЛЕННЫЙ БЛОК: Теперь без ошибок в синтаксисе
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),
-    "import.meta.env.SSR": "false", 
-    "typeof window": JSON.stringify("object"),
+    "import.meta.env.SSR": "false",
+    "global": "window", 
   },
 
   server: {
