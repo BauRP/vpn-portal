@@ -1,7 +1,8 @@
 /**
  * Standalone SPA build for the Capacitor APK.
  * * ИСПРАВЛЕНО ДЛЯ ГОСПОДИНА:
- * Убраны конфликты синтаксиса, мешавшие сборке APK.
+ * Заменен terser на esbuild, чтобы избежать ошибки "terser not found".
+ * Убраны конфликты синтаксиса в блоке define.
  */
 import { defineConfig } from "vite";
 import path from "node:path";
@@ -37,7 +38,8 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
     target: "es2022",
-    minify: 'terser',
+    // ИСПРАВЛЕНИЕ: Используем esbuild, он всегда есть под рукой и не выдает ошибок
+    minify: 'esbuild', 
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, "index.html"),
@@ -47,7 +49,7 @@ export default defineConfig({
     },
   },
 
-  // ИСПРАВЛЕННЫЙ БЛОК: Теперь без ошибок в синтаксисе
+  // Блок define без лишних typeof, чтобы не злить компилятор
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),
     "import.meta.env.SSR": "false",
