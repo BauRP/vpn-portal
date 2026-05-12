@@ -40,12 +40,23 @@ export default defineConfig({
     target: "es2022",
     // ИСПРАВЛЕНИЕ: Используем esbuild, он всегда есть под рукой и не выдает ошибок
     minify: 'esbuild', 
+    // APK МАНДАТ: НЕ дробим бандл на чанки. WebView с file:// origin
+    // не может разрешить динамические chunk-URL и падает с
+    // "Failed to fetch dynamically imported module". Один JS-файл = ноль 404.
+    cssCodeSplit: false,
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, "index.html"),
       },
-      // Игнорируем серверные зависимости при сборке
       external: ["node:async_hooks"],
+      output: {
+        // Всё в один чанк, никаких vendor/route splits.
+        manualChunks: undefined,
+        inlineDynamicImports: true,
+        entryFileNames: "assets/app.js",
+        chunkFileNames: "assets/app-[hash].js",
+        assetFileNames: "assets/[name]-[hash][extname]",
+      },
     },
   },
 

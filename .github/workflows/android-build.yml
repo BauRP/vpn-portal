@@ -43,6 +43,16 @@ jobs:
             echo "Папка android уже существует, пропускаем инициализацию."
           fi
 
+      - name: Inject Native VPN Manifest
+        # Перезаписываем сгенерированный AndroidManifest нашим шаблоном,
+        # в котором уже объявлены VpnService, BIND_VPN_SERVICE и
+        # FOREGROUND_SERVICE — без них OS блокирует туннель.
+        run: |
+          if [ -f "android-template/AndroidManifest.xml" ]; then
+            cp android-template/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+            echo "AndroidManifest.xml заменён шаблоном с VpnService."
+          fi
+
       - name: Capacitor Sync
         # Синхронизируем наш сайт с мобильной оболочкой
         run: npx cap sync android
