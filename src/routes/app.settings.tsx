@@ -41,14 +41,13 @@ function ServerDiscoverySection() {
 
   const run = async () => {
     if (apk) {
-      setError("Server discovery is web-only in this build.");
+      setError("Server discovery requires the web build (the APK has no outbound HTTP from the WebView origin).");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const mod = await import("@/lib/servers/scrape.functions");
-      const r = await mod.scrapePublicSources();
+      const r = await scrapePublicSources();
       setResult({ nodes: r.nodes.length, sources: r.sources, raw: r.raw });
       qc.invalidateQueries({ queryKey: ["servers"] });
     } catch (e) {
