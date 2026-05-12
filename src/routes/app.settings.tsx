@@ -20,11 +20,13 @@ import { CrownIcon } from "@/components/mastervpn/PaywallModal";
 import { SplitTunnelSection, PremiumLockedToggle } from "@/components/mastervpn/SplitTunnel";
 import type { LangCode } from "@/i18n/translations";
 import { useQueryClient } from "@tanstack/react-query";
+// Static import: createServerFn is client-shimmed to a fetch call in the
+// browser bundle, so this no longer pulls node:async_hooks. Static binding
+// also fixes the APK "Failed to fetch dynamically imported module" error,
+// which fires when the WebView's file:// origin can't resolve a code-split
+// chunk URL.
+import { scrapePublicSources } from "@/lib/servers/scrape.functions";
 
-// NOTE: Do NOT import `@tanstack/react-start` or the server-fn module at the
-// top of this client route — that pulls Node-only deps (node:async_hooks)
-// into the SPA/APK bundle and crashes the WebView when /app/settings mounts.
-// The scrape fn is invoked lazily, only on web (http/https), via dynamic import.
 function isApkRuntime() {
   if (typeof window === "undefined") return false;
   return window.location.protocol === "file:" || /capacitor/i.test(navigator.userAgent || "");
@@ -39,14 +41,13 @@ function ServerDiscoverySection() {
 
   const run = async () => {
     if (apk) {
-      setError("Server discovery is web-only in this build.");
+      setError("Server discovery requires the web build (the APK has no outbound HTTP from the WebView origin).");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const mod = await import("@/lib/servers/scrape.functions");
-      const r = await mod.scrapePublicSources();
+      const r = await scrapePublicSources();
       setResult({ nodes: r.nodes.length, sources: r.sources, raw: r.raw });
       qc.invalidateQueries({ queryKey: ["servers"] });
     } catch (e) {
