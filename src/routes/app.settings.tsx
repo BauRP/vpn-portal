@@ -38,10 +38,15 @@ function ServerDiscoverySection() {
   const [error, setError] = useState<string | null>(null);
 
   const run = async () => {
+    if (apk) {
+      setError("Server discovery is web-only in this build.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const r = await invokeScrape();
+      const mod = await import("@/lib/servers/scrape.functions");
+      const r = await mod.scrapePublicSources();
       setResult({ nodes: r.nodes.length, sources: r.sources, raw: r.raw });
       qc.invalidateQueries({ queryKey: ["servers"] });
     } catch (e) {
