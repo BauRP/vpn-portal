@@ -19,13 +19,20 @@ import { vpnEngine } from "@/components/mastervpn/vpnEngine";
 import { CrownIcon } from "@/components/mastervpn/PaywallModal";
 import { SplitTunnelSection, PremiumLockedToggle } from "@/components/mastervpn/SplitTunnel";
 import type { LangCode } from "@/i18n/translations";
-import { useServerFn } from "@tanstack/react-start";
-import { scrapePublicSources } from "@/lib/servers/scrape.functions";
 import { useQueryClient } from "@tanstack/react-query";
 
+// NOTE: Do NOT import `@tanstack/react-start` or the server-fn module at the
+// top of this client route — that pulls Node-only deps (node:async_hooks)
+// into the SPA/APK bundle and crashes the WebView when /app/settings mounts.
+// The scrape fn is invoked lazily, only on web (http/https), via dynamic import.
+function isApkRuntime() {
+  if (typeof window === "undefined") return false;
+  return window.location.protocol === "file:" || /capacitor/i.test(navigator.userAgent || "");
+}
+
 function ServerDiscoverySection() {
-  const invokeScrape = useServerFn(scrapePublicSources);
   const qc = useQueryClient();
+  const apk = typeof window !== "undefined" && isApkRuntime();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ nodes: number; sources: number; raw: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
