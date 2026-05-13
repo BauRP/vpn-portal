@@ -81,6 +81,7 @@ const webFallback: TrivoVpnPlugin = {
   async tcpPing() { return { rttMs: null }; },
   async icmpPing() { return { rttMs: null }; },
   async start() { return { started: false }; },
+  async startTunnel() { return { started: false }; },
   async stop() { return { stopped: false }; },
   async setProtocol() {},
   async setKillSwitch() {},
