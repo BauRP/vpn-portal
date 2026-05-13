@@ -57,6 +57,38 @@ jobs:
         # Синхронизируем наш сайт с мобильной оболочкой
         run: npx cap sync android
 
+      - name: Inject Native VPN Java Sources
+        # Копируем нашу нативную обвязку (TrivoVpnService + TrivoVpnPlugin)
+        # в сгенерированный android/ проект ПОСЛЕ cap sync,
+        # чтобы Capacitor не затёр её своими шаблонами.
+        run: |
+          mkdir -p android/app/src/main/java/com/trivo/vpn
+          cp -f android/app/src/main/java/com/trivo/vpn/*.java android/app/src/main/java/com/trivo/vpn/ 2>/dev/null || true
+          # Регистрируем плагин в MainActivity
+          MAIN_ACT=$(find android/app/src/main/java -name "MainActivity.java" | head -n1)
+          if [ -n "$MAIN_ACT" ] && ! grep -q "TrivoVpnPlugin" "$MAIN_ACT"; then
+            sed -i 's|import com.getcapacitor.BridgeActivity;|import com.getcapacitor.BridgeActivity;\nimport com.trivo.vpn.TrivoVpnPlugin;|' "$MAIN_ACT"
+            sed -i 's|public class MainActivity extends BridgeActivity {|public class MainActivity extends BridgeActivity {\n  @Override public void onCreate(android.os.Bundle s){ registerPlugin(TrivoVpnPlugin.class); super.onCreate(s); }|' "$MAIN_ACT"
+          fi
+
+      - name: Inject VPN Core Binaries
+        # Скачиваем pre-compiled нативное ядро (sing-box) во время сборки.
+        # Если URL недоступен — продолжаем без ядра (Java-обвязка работает,
+        # CORE_INJECTION_POINT просто остаётся пустым).
+        run: |
+          mkdir -p android/app/libs
+          curl -fL -o android/app/libs/vpn-core.aar \
+            https://github.com/SagerNet/sing-box/releases/download/v1.8.0/sing-box-1.8.0-android-lib.aar \
+            || echo "vpn-core.aar download failed — building without core"
+
+      - name: Wire libs/*.aar into build.gradle
+        run: |
+          GRADLE=android/app/build.gradle
+          if [ -f "$GRADLE" ] && ! grep -q "libs.*\.aar" "$GRADLE"; then
+            sed -i "/dependencies *{/a\\    implementation fileTree(dir: 'libs', include: ['*.aar'])" "$GRADLE"
+          fi
+
+
       - name: Build Debug APK
         run: |
           cd android
