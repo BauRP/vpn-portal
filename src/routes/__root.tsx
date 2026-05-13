@@ -111,6 +111,17 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  // Silent background sync of public node sources. Runs on launch +
+  // visibility change. Honors a 6h interval and 15min retry-on-failure.
+  // No UI, no loaders — see src/lib/servers/autoSync.ts.
+  if (typeof window !== "undefined") {
+    void import("@/lib/servers/autoSync").then(({ startAutoSync }) => {
+      startAutoSync({
+        onSynced: () => queryClient.invalidateQueries({ queryKey: ["servers"] }),
+      });
+    });
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
