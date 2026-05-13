@@ -39,10 +39,23 @@ export interface PluginListenerHandle {
   remove: () => Promise<void>;
 }
 
+export interface StartTunnelOptions {
+  config: {
+    protocol: StartOptions["protocol"];
+    host: string;
+    port: number;
+    /** Raw outbound config consumed by the native core (sing-box JSON, VLESS URL, etc.). */
+    raw?: string;
+    [k: string]: unknown;
+  };
+}
+
 export interface TrivoVpnPlugin {
   tcpPing(opts: TcpPingOptions): Promise<TcpPingResult>;
   icmpPing(opts: TcpPingOptions): Promise<TcpPingResult>;
   start(opts: StartOptions): Promise<{ started: boolean }>;
+  /** Native VpnService entrypoint — passes JSON config to Kotlin/Java side. */
+  startTunnel(opts: StartTunnelOptions): Promise<{ started: boolean }>;
   stop(): Promise<{ stopped: boolean }>;
   setProtocol(opts: { protocol: StartOptions["protocol"] }): Promise<void>;
   setKillSwitch(opts: { enabled: boolean }): Promise<void>;
@@ -68,6 +81,7 @@ const webFallback: TrivoVpnPlugin = {
   async tcpPing() { return { rttMs: null }; },
   async icmpPing() { return { rttMs: null }; },
   async start() { return { started: false }; },
+  async startTunnel() { return { started: false }; },
   async stop() { return { stopped: false }; },
   async setProtocol() {},
   async setKillSwitch() {},

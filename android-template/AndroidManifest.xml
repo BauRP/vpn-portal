@@ -68,7 +68,7 @@
           VpnService.prepare() consent through this service.
         -->
         <service
-            android:name=".VpnService"
+            android:name="com.trivo.vpn.TrivoVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
             android:foregroundServiceType="specialUse"
             android:exported="false">
