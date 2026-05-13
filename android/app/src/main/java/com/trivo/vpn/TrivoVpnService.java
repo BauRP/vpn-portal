@@ -29,7 +29,7 @@ public class TrivoVpnService extends VpnService {
 
     private static final String TAG = "TrivoVpnService";
     private static final String CHANNEL_ID = "trivo_vpn_channel";
-    private static final int NOTIFICATION_ID = 0xT3;
+    private static final int NOTIFICATION_ID = 0x7113;
 
     public static final String ACTION_START = "com.trivo.vpn.START";
     public static final String ACTION_STOP  = "com.trivo.vpn.STOP";
