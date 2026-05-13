@@ -58,12 +58,12 @@ jobs:
         run: npx cap sync android
 
       - name: Inject Native VPN Java Sources
-        # Копируем нашу нативную обвязку (TrivoVpnService + TrivoVpnPlugin)
-        # в сгенерированный android/ проект ПОСЛЕ cap sync,
-        # чтобы Capacitor не затёр её своими шаблонами.
+        # Копируем нативную обвязку (TrivoVpnService + TrivoVpnPlugin)
+        # из android-template/java в сгенерированный android/ проект ПОСЛЕ
+        # cap sync, чтобы Capacitor не затёр её своими шаблонами.
         run: |
           mkdir -p android/app/src/main/java/com/trivo/vpn
-          cp -f android/app/src/main/java/com/trivo/vpn/*.java android/app/src/main/java/com/trivo/vpn/ 2>/dev/null || true
+          cp -f android-template/java/com/trivo/vpn/*.java android/app/src/main/java/com/trivo/vpn/
           # Регистрируем плагин в MainActivity
           MAIN_ACT=$(find android/app/src/main/java -name "MainActivity.java" | head -n1)
           if [ -n "$MAIN_ACT" ] && ! grep -q "TrivoVpnPlugin" "$MAIN_ACT"; then
