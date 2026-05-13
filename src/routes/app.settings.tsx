@@ -19,67 +19,11 @@ import { vpnEngine } from "@/components/mastervpn/vpnEngine";
 import { CrownIcon } from "@/components/mastervpn/PaywallModal";
 import { SplitTunnelSection, PremiumLockedToggle } from "@/components/mastervpn/SplitTunnel";
 import type { LangCode } from "@/i18n/translations";
-import { useQueryClient } from "@tanstack/react-query";
-// Static import: createServerFn is client-shimmed to a fetch call in the
-// browser bundle, so this no longer pulls node:async_hooks. Static binding
-// also fixes the APK "Failed to fetch dynamically imported module" error,
-// which fires when the WebView's file:// origin can't resolve a code-split
-// chunk URL.
-import { scrapePublicSources } from "@/lib/servers/scrape.functions";
 
-function isApkRuntime() {
-  if (typeof window === "undefined") return false;
-  return window.location.protocol === "file:" || /capacitor/i.test(navigator.userAgent || "");
-}
-
-function ServerDiscoverySection() {
-  const qc = useQueryClient();
-  const apk = typeof window !== "undefined" && isApkRuntime();
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ nodes: number; sources: number; raw: number } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const run = async () => {
-    if (apk) {
-      setError("Server discovery requires the web build (the APK has no outbound HTTP from the WebView origin).");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await scrapePublicSources();
-      setResult({ nodes: r.nodes.length, sources: r.sources, raw: r.raw });
-      qc.invalidateQueries({ queryKey: ["servers"] });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Section title="// SERVER DISCOVERY">
-      <p className="text-xs text-muted-foreground leading-relaxed">
-        Aggregates public VLESS / VMess / Shadowsocks / Trojan subscription sources, parses with the strict sanitizer, and dedupes by host:port.
-      </p>
-      <button
-        onClick={run}
-        disabled={busy}
-        className="mt-3 w-full rounded-md border border-neon/40 bg-neon/10 px-3 py-2 font-mono text-[11px] tracking-widest text-neon hover:bg-neon/20 disabled:opacity-50"
-      >
-        {busy ? "SCANNING…" : "REFRESH SOURCES"}
-      </button>
-      {result && (
-        <div className="mt-3 space-y-1 font-mono text-[10px] text-muted-foreground">
-          <div className="flex justify-between"><span>SOURCES</span><span className="text-foreground">{result.sources}</span></div>
-          <div className="flex justify-between"><span>RAW PARSED</span><span className="text-foreground">{result.raw}</span></div>
-          <div className="flex justify-between"><span>UNIQUE NODES</span><span className="text-success">{result.nodes}</span></div>
-        </div>
-      )}
-      {error && <p className="mt-2 font-mono text-[10px] text-destructive">{error}</p>}
-    </Section>
-  );
-}
+// Server discovery is fully automated — see src/lib/servers/autoSync.ts.
+// The previous manual "Refresh Sources" panel and Raw/Unique counters
+// were intentionally removed: sync now runs silently on launch + every
+// 6h, with a 15min silent retry on failure.
 
 function PageComponent() {
   const { t, lang, setLang } = useI18n();
@@ -370,7 +314,7 @@ function PageComponent() {
         </div>
       </Section>
 
-      <ServerDiscoverySection />
+      
 
       <p className="mt-8 text-center font-mono text-[10px] text-muted-foreground">{t("set.build")}</p>
 
