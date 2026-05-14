@@ -81,11 +81,16 @@ jobs:
             https://github.com/SagerNet/sing-box/releases/download/v1.8.0/sing-box-1.8.0-android-lib.aar \
             || echo "vpn-core.aar download failed — building without core"
 
-      - name: Wire libs/*.aar into build.gradle
+      - name: Wire libs/*.aar + LocalBroadcastManager into build.gradle
         run: |
           GRADLE=android/app/build.gradle
-          if [ -f "$GRADLE" ] && ! grep -q "libs.*\.aar" "$GRADLE"; then
-            sed -i "/dependencies *{/a\\    implementation fileTree(dir: 'libs', include: ['*.aar'])" "$GRADLE"
+          if [ -f "$GRADLE" ]; then
+            if ! grep -q "libs.*\.aar" "$GRADLE"; then
+              sed -i "/dependencies *{/a\\    implementation fileTree(dir: 'libs', include: ['*.aar'])" "$GRADLE"
+            fi
+            if ! grep -q "localbroadcastmanager" "$GRADLE"; then
+              sed -i "/dependencies *{/a\\    implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'" "$GRADLE"
+            fi
           fi
 
 

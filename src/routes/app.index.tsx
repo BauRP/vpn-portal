@@ -20,6 +20,7 @@ import { ServerSheet } from "@/components/mastervpn/ServerSheet";
 import { useServers } from "@/lib/servers/useServers";
 import { DashboardBandwidthExtra, type DashboardAlert } from "@/components/mastervpn/DashboardBandwidthExtra";
 import { BatteryOptHint } from "@/components/mastervpn/BatteryOptHint";
+import { useAutoSyncStatus, isFirstLaunchSyncing } from "@/lib/servers/autoSync";
 
 function PageComponent() {
   const { t } = useI18n();
@@ -27,6 +28,8 @@ function PageComponent() {
   const { isPremium, openPaywall } = usePremium();
   const { connected, connecting, reconnecting, cooldown, elapsed, down, up, downSeries, upSeries, dnsSecure, dnsServers, protocol, stealthMode, toggle, selectedServerId, smartAccel, mtu } = useVpn();
   const { data: serverData } = useServers();
+  const syncStatus = useAutoSyncStatus();
+  const blockConnect = isFirstLaunchSyncing();
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const selectedServer = useMemo(() => {
@@ -59,18 +62,14 @@ function PageComponent() {
 
       <div className="mt-6 flex justify-center">
         <button
-          disabled={cooldown || connecting}
+          disabled={cooldown || connecting || blockConnect}
           onClick={() => {
-            // Hard lock: cooldown / in-flight handshake blocks repeated taps
-            // so we never spawn parallel handshakes from tap-spamming.
-            if (cooldown || connecting) return;
+            if (cooldown || connecting || blockConnect) return;
             haptic(15);
-            // Freemium: anyone can start the basic tunnel.
-            // Premium-only layers (PQC, Elite servers) are gated separately in Settings.
             toggle();
           }}
           className={`relative flex h-40 w-40 flex-col items-center justify-center rounded-full border-2 transition-all duration-500 ${
-            cooldown || connecting ? "cursor-not-allowed opacity-80" : ""
+            cooldown || connecting || blockConnect ? "cursor-not-allowed opacity-80" : ""
           } ${
             connected ? "border-success bg-success/10" : "border-neon bg-neon/5 animate-pulse-ring"
           }`}
@@ -91,16 +90,32 @@ function PageComponent() {
           <p className="mt-1 flex max-w-[80%] items-center justify-center gap-1 text-center font-mono text-[9px] leading-tight text-muted-foreground">
             {connected
               ? fmt(elapsed)
-              : reconnecting
-                ? t("dash.reconnecting", "RECONNECTING…")
-                : connecting
-                  ? t("dash.connecting", "HANDSHAKE…")
-                  : isPremium
-                    ? t("dash.tapToConnect")
-                    : t("dash.tapToConnectBasic", "TAP TO CONNECT · BASIC")}
+              : blockConnect
+                ? t("dash.waitUpdating", "WAIT · UPDATING…")
+                : reconnecting
+                  ? t("dash.reconnecting", "RECONNECTING…")
+                  : connecting
+                    ? t("dash.connecting", "HANDSHAKE…")
+                    : isPremium
+                      ? t("dash.tapToConnect")
+                      : t("dash.tapToConnectBasic", "TAP TO CONNECT · BASIC")}
           </p>
         </button>
       </div>
+
+      {/* Discrete sync indicator — only visible while a background sync is in flight. */}
+      {syncStatus === "syncing" && (
+        <div
+          className="mt-3 flex items-center justify-center gap-2 rounded-md border border-neon/30 bg-neon/5 px-3 py-1.5"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neon" />
+          <span className="font-mono text-[10px] tracking-widest text-neon">
+            {t("dash.syncingServers", "SYNCING SERVERS…")}
+          </span>
+        </div>
+      )}
 
       <div className="mt-5 grid grid-cols-2 gap-3">
         <Card label={t("dash.stealthTunnel")} value={connected ? t("dash.active") : t("dash.standby")} dot={connected ? "success" : "warn"} />

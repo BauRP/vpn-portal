@@ -1,44 +1,93 @@
 package com.trivo.vpn;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.net.VpnService;
 import android.util.Log;
+
+import androidx.activity.result.ActivityResult;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
- * TrivoVpnPlugin — Capacitor bridge for the JS layer.
+ * TrivoVpnPlugin — Capacitor bridge between JS and the native VpnService.
  *
- * JS calls (see src/native/trivoVpn.ts):
- *   TrivoVpn.startTunnel({ config: "<json>" })
+ * JS API (see src/native/trivoVpn.ts):
+ *   TrivoVpn.startTunnel({ config: { protocol, host, port, raw } })
  *   TrivoVpn.stop()
+ *   TrivoVpn.addListener("healthChange", cb)
  *
- * Permission flow:
- *   VpnService.prepare() returns an intent the user must approve once.
- *   We surface that requirement back to JS via call.reject("vpn_consent_required")
- *   so the UI can react. Once consent is granted, JS calls startTunnel again.
+ * Lifecycle events ("connected" | "disconnected" | "error") are received
+ * from TrivoVpnService over a LocalBroadcast and forwarded to JS via
+ * `notifyListeners("healthChange", ...)`.
  */
 @CapacitorPlugin(name = "TrivoVpn")
 public class TrivoVpnPlugin extends Plugin {
 
     private static final String TAG = "TrivoVpnPlugin";
-    private static final int REQ_VPN_CONSENT = 0xC0DE;
 
-    private PluginCall pendingStart;
+    public static final String BROADCAST_STATUS = "com.trivo.vpn.STATUS";
+    public static final String EXTRA_STATE = "state";   // connected | disconnected | error
+    public static final String EXTRA_REASON = "reason";
+
+    private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String state = intent.getStringExtra(EXTRA_STATE);
+            String reason = intent.getStringExtra(EXTRA_REASON);
+            Log.i(TAG, "status broadcast state=" + state + " reason=" + reason);
+
+            JSObject ev = new JSObject();
+            // Map native states onto the JS NativeHealth contract.
+            switch (state == null ? "" : state) {
+                case "connected":
+                    ev.put("state", "connected");
+                    break;
+                case "disconnected":
+                    ev.put("state", "down");
+                    break;
+                case "error":
+                default:
+                    ev.put("state", "down");
+                    if (reason != null) ev.put("reason", reason);
+                    break;
+            }
+            notifyListeners("healthChange", ev);
+        }
+    };
+
+    @Override
+    public void load() {
+        super.load();
+        IntentFilter filter = new IntentFilter(BROADCAST_STATUS);
+        LocalBroadcastManager.getInstance(getContext())
+                .registerReceiver(statusReceiver, filter);
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        try {
+            LocalBroadcastManager.getInstance(getContext()).unregisterReceiver(statusReceiver);
+        } catch (Throwable ignored) {}
+        super.handleOnDestroy();
+    }
 
     @PluginMethod
     public void startTunnel(PluginCall call) {
-        final JSObject cfg = call.getObject("config", new JSObject());
+        JSObject cfg = call.getObject("config", new JSObject());
         Log.i(TAG, "startTunnel cfg=" + cfg);
 
         Intent prepare = VpnService.prepare(getContext());
         if (prepare != null) {
-            // Need user consent; remember the call and launch the system dialog.
-            pendingStart = call;
+            // Need user consent — launch the system dialog. Result lands in onVpnConsentResult.
             call.setKeepAlive(true);
             startActivityForResult(call, prepare, "onVpnConsentResult");
             return;
@@ -46,15 +95,15 @@ public class TrivoVpnPlugin extends Plugin {
         launchService(call, cfg.toString());
     }
 
-    /** Invoked by Capacitor after the system VPN-consent dialog returns. */
-    public void onVpnConsentResult(PluginCall call, androidx.activity.result.ActivityResult result) {
+    @ActivityCallback
+    public void onVpnConsentResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
         if (result.getResultCode() == android.app.Activity.RESULT_OK) {
             JSObject cfg = call.getObject("config", new JSObject());
             launchService(call, cfg.toString());
         } else {
             call.reject("vpn_consent_denied");
         }
-        pendingStart = null;
     }
 
     private void launchService(PluginCall call, String configJson) {
@@ -88,5 +137,23 @@ public class TrivoVpnPlugin extends Plugin {
         } catch (Throwable t) {
             call.reject("stop_failed", t);
         }
+    }
+
+    /* ---------------- No-op bridges to satisfy the JS interface ---------------- */
+
+    @PluginMethod public void tcpPing(PluginCall call)  { JSObject r=new JSObject(); r.put("rttMs", JSObject.NULL); call.resolve(r); }
+    @PluginMethod public void icmpPing(PluginCall call) { JSObject r=new JSObject(); r.put("rttMs", JSObject.NULL); call.resolve(r); }
+    @PluginMethod public void start(PluginCall call)    { startTunnel(call); }
+    @PluginMethod public void setProtocol(PluginCall call)            { call.resolve(); }
+    @PluginMethod public void setKillSwitch(PluginCall call)          { call.resolve(); }
+    @PluginMethod public void setStealthMode(PluginCall call)         { call.resolve(); }
+    @PluginMethod public void setAcceleration(PluginCall call)        { call.resolve(); }
+    @PluginMethod public void scheduleScraper(PluginCall call)        { JSObject r=new JSObject(); r.put("scheduled", false); call.resolve(r); }
+    @PluginMethod public void cancelScraper(PluginCall call)          { call.resolve(); }
+    @PluginMethod public void isIgnoringBatteryOptimizations(PluginCall call) {
+        JSObject r=new JSObject(); r.put("ignoring", true); call.resolve(r);
+    }
+    @PluginMethod public void requestIgnoreBatteryOptimizations(PluginCall call) {
+        JSObject r=new JSObject(); r.put("requested", false); call.resolve(r);
     }
 }
