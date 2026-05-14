@@ -11,19 +11,25 @@ import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+
 import org.json.JSONObject;
 
 import java.io.IOException;
 
 /**
- * TrivoVpnService — native Android VpnService wrapper.
+ * TrivoVpnService — native Android VpnService backed by a sing-box core.
  *
  * Lifecycle:
  *   1. JS calls TrivoVpn.startTunnel({ config }) via the Capacitor plugin.
  *   2. The plugin starts this service with the JSON config in the intent.
- *   3. onStartCommand() parses the config, builds the tun interface via
- *      establish(), and hands the file descriptor to the native VPN core
- *      (sing-box .aar dropped into android/app/libs/ by GitHub Actions).
+ *   3. onStartCommand() promotes itself to a foreground service, parses
+ *      the config, builds the TUN interface via VpnService.Builder, and
+ *      hands the file descriptor to the bundled sing-box core (libbox.aar
+ *      dropped into android/app/libs/ by GitHub Actions).
+ *   4. Status transitions ("connected" / "disconnected" / "error") are
+ *      broadcast over LocalBroadcastManager and forwarded to JS by the
+ *      plugin's healthChange listener.
  */
 public class TrivoVpnService extends VpnService {
 
@@ -45,7 +51,7 @@ public class TrivoVpnService extends VpnService {
 
         final String action = intent.getAction();
         if (ACTION_STOP.equals(action)) {
-            shutdown();
+            shutdown("user_stop");
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -59,7 +65,8 @@ public class TrivoVpnService extends VpnService {
             establishTunnel(configJson);
         } catch (Exception e) {
             Log.e(TAG, "establishTunnel failed", e);
-            shutdown();
+            broadcastStatus("error", e.getMessage());
+            shutdown("establish_failed");
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -67,7 +74,12 @@ public class TrivoVpnService extends VpnService {
     }
 
     /**
-     * Build the tun interface and hand the fd to the native core.
+     * Build the TUN interface and hand the fd to the native core.
+     *
+     * IPv4 + IPv6 default routes ensure ALL system traffic is captured.
+     * We add Cloudflare 1.1.1.1 / 1.0.0.1 + Google 8.8.8.8 as DNS so the
+     * tunnel can resolve names independently of the carrier resolver
+     * (DNS leak protection at the transport layer).
      */
     private void establishTunnel(String configJson) throws IOException {
         String protocol = "unknown";
@@ -76,9 +88,11 @@ public class TrivoVpnService extends VpnService {
         try {
             if (configJson != null) {
                 JSONObject cfg = new JSONObject(configJson);
-                protocol = cfg.optString("protocol", protocol);
-                host     = cfg.optString("host", host);
-                port     = cfg.optInt("port", port);
+                JSONObject inner = cfg.optJSONObject("config");
+                JSONObject src = inner != null ? inner : cfg;
+                protocol = src.optString("protocol", protocol);
+                host     = src.optString("host", host);
+                port     = src.optInt("port", port);
                 Log.i(TAG, "VPN cfg parsed protocol=" + protocol
                         + " host=" + host + " port=" + port);
             }
@@ -90,14 +104,21 @@ public class TrivoVpnService extends VpnService {
                 .setSession("Trivo VPN")
                 .setMtu(1500)
                 .addAddress("10.10.0.2", 24)
+                .addAddress("fd00:1:fd00:1:fd00:1:fd00:1", 126)
                 .addRoute("0.0.0.0", 0)
                 .addRoute("::", 0)
                 .addDnsServer("1.1.1.1")
-                .addDnsServer("1.0.0.1");
+                .addDnsServer("1.0.0.1")
+                .addDnsServer("2606:4700:4700::1111");
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             b.setMetered(false);
         }
+
+        // Exclude our own package so the VPN never tunnels itself (loopback storms).
+        try {
+            b.addDisallowedApplication(getPackageName());
+        } catch (Exception ignored) {}
 
         tunInterface = b.establish();
         if (tunInterface == null) {
@@ -113,31 +134,34 @@ public class TrivoVpnService extends VpnService {
             try {
                 Log.i(TAG, "core thread starting protocol=" + coreProtocol + " fd=" + fd);
 
-                // Initialize the native sing-box core
-                io.nekohasekai.libbox.Libbox.setup(getApplicationContext().getFilesDir().getAbsolutePath());
-                io.nekohasekai.libbox.BoxService box = new io.nekohasekai.libbox.BoxService(coreConfig, fd);
+                // Bring the bundled sing-box core online. The .aar is dropped
+                // into android/app/libs/ by the GitHub Actions workflow.
+                io.nekohasekai.libbox.Libbox.setup(
+                        getApplicationContext().getFilesDir().getAbsolutePath());
+                io.nekohasekai.libbox.BoxService box =
+                        new io.nekohasekai.libbox.BoxService(coreConfig, fd);
                 box.start();
+
+                broadcastStatus("connected", coreProtocol);
+                updateNotification("Trivo VPN active · " + coreProtocol);
 
                 while (running && !Thread.currentThread().isInterrupted()) {
                     Thread.sleep(1000L);
                 }
                 box.stop();
+                broadcastStatus("disconnected", "core_stopped");
             } catch (InterruptedException ie) {
                 Log.i(TAG, "core thread interrupted");
+                broadcastStatus("disconnected", "interrupted");
             } catch (Throwable t) {
                 Log.e(TAG, "core thread crashed", t);
+                broadcastStatus("error", t.getMessage());
             }
         }, "trivo-vpn-core");
         coreThread.start();
-
-        updateNotification("Trivo VPN active · " + protocol);
     }
 
-    public void establish(String configJson) throws IOException {
-        establishTunnel(configJson);
-    }
-
-    private void shutdown() {
+    private void shutdown(String reason) {
         running = false;
         if (coreThread != null) {
             coreThread.interrupt();
@@ -147,20 +171,32 @@ public class TrivoVpnService extends VpnService {
             try { tunInterface.close(); } catch (IOException ignored) {}
             tunInterface = null;
         }
+        broadcastStatus("disconnected", reason);
     }
 
     @Override
     public void onDestroy() {
         Log.i(TAG, "onDestroy");
-        shutdown();
+        shutdown("destroyed");
         super.onDestroy();
     }
 
     @Override
     public void onRevoke() {
         Log.w(TAG, "onRevoke — VPN permission revoked by user/OS");
-        shutdown();
+        shutdown("revoked");
         super.onRevoke();
+    }
+
+    private void broadcastStatus(String state, String reason) {
+        try {
+            Intent i = new Intent(TrivoVpnPlugin.BROADCAST_STATUS);
+            i.putExtra(TrivoVpnPlugin.EXTRA_STATE, state);
+            if (reason != null) i.putExtra(TrivoVpnPlugin.EXTRA_REASON, reason);
+            LocalBroadcastManager.getInstance(this).sendBroadcast(i);
+        } catch (Throwable t) {
+            Log.w(TAG, "broadcastStatus failed", t);
+        }
     }
 
     private Notification buildNotification(String text) {
@@ -196,7 +232,6 @@ public class TrivoVpnService extends VpnService {
         nm.createNotificationChannel(ch);
     }
 
-    @SuppressWarnings("unchecked")
     private Class<?> getMainActivityClass() {
         try {
             return Class.forName(getPackageName() + ".MainActivity");
