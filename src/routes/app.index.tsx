@@ -28,6 +28,8 @@ function PageComponent() {
   const { isPremium, openPaywall } = usePremium();
   const { connected, connecting, reconnecting, cooldown, elapsed, down, up, downSeries, upSeries, dnsSecure, dnsServers, protocol, stealthMode, toggle, selectedServerId, smartAccel, mtu } = useVpn();
   const { data: serverData } = useServers();
+  const syncStatus = useAutoSyncStatus();
+  const blockConnect = isFirstLaunchSyncing();
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const selectedServer = useMemo(() => {
