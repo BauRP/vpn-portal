@@ -20,6 +20,7 @@ import { ServerSheet } from "@/components/mastervpn/ServerSheet";
 import { useServers } from "@/lib/servers/useServers";
 import { DashboardBandwidthExtra, type DashboardAlert } from "@/components/mastervpn/DashboardBandwidthExtra";
 import { BatteryOptHint } from "@/components/mastervpn/BatteryOptHint";
+import { useAutoSyncStatus, isFirstLaunchSyncing } from "@/lib/servers/autoSync";
 
 function PageComponent() {
   const { t } = useI18n();
